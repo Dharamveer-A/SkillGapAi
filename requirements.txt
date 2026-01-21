@@ -1,0 +1,11 @@
+pandas
+spacy
+numpy
+streamlit
+plotly
+matplotlib
+sentence_transformers
+pdfplumber
+PyPDF2
+python-docx
+fpdf
