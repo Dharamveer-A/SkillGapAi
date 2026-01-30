@@ -314,7 +314,6 @@ MASTER_SOFT_SKILLS = {
 
 # CONDENSED SKILL CATEGORIES - Better for visualization
 SKILL_CATEGORIES = {
-    # ===== TECHNICAL SKILLS (10 MAJOR CATEGORIES) =====
     
     "Programming & Scripting": [
         "python", "java", "c", "c++", "c#", "go", "golang", "rust", "kotlin", "swift",
@@ -387,8 +386,6 @@ SKILL_CATEGORIES = {
         "power bi", "tableau", "excel", "business intelligence", "bi",
         "ui design", "ux design", "figma", "wireframing", "prototyping"
     ],
-    
-    # ===== SOFT SKILLS (8 MAJOR CATEGORIES) =====
     
     "Communication & Presentation": [
         "communication", "verbal communication", "written communication",

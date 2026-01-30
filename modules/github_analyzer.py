@@ -41,17 +41,14 @@ def fetch_github_repos(username):
     try:
         response = requests.get(api_url, timeout=10)
         
-        # --- CRITICAL FIX START ---
         # Prevent app crash if GitHub rate limit (60 req/hr) is hit
         if response.status_code == 403:
             st.warning("⚠️ GitHub API rate limit exceeded. GitHub skills cannot be analyzed right now.")
             return []
-        # --- CRITICAL FIX END ---
             
         if response.status_code == 200:
             return response.json()
     except Exception as e:
-        # Silently fail or log debug info, but don't crash the UI
         pass
     return []
 
@@ -63,7 +60,6 @@ def extract_github_skills(repos, skill_set):
     if not repos:
         return []
 
-    # Pre-compile regex patterns for efficiency
     import re
     
     for repo in repos:
@@ -73,13 +69,11 @@ def extract_github_skills(repos, skill_set):
         for skill in skill_set:
             # First do a fast string check
             if skill in text:
-                # --- ACCURACY FIX START ---
                 # Use regex boundaries to ensure "Good" doesn't match "Go"
                 # Escape skill to handle special chars like C++
                 pattern = r'(?:^|[\s\W])' + re.escape(skill) + r'(?:$|[\s\W])'
                 if re.search(pattern, text):
                     found_skills.add(skill)
-                # --- ACCURACY FIX END ---
         
         # Always trust the official GitHub language field
         if repo.get("language"):
