@@ -1,6 +1,6 @@
 """
 NLP Processing Module
-Handles skill extraction using spaCy and pattern matching
+Handles skill extraction using spaCy and pattern matching (Optimized)
 """
 
 import spacy
@@ -10,62 +10,71 @@ from data.skills_list import SKILL_CATEGORIES
 
 
 @st.cache_resource
-def load_spacy_model():
-    """Load spaCy model with caching"""
+def load_nlp_resources(technical_skills_set, soft_skills_set):
+    """
+    Load spaCy model AND build matchers once to boost performance.
+    This runs only once when the app starts.
+    """
     try:
-        return spacy.load("en_core_web_trf")
+        # Try loading the accurate transformer model
+        nlp = spacy.load("en_core_web_trf")
     except OSError:
-        st.error("spaCy model 'en_core_web_trf' not found. Please install it using: python -m spacy download en_core_web_trf")
-        return None
+        # Fallback to small model if trf is missing, or warn user
+        try:
+            nlp = spacy.load("en_core_web_sm")
+            st.warning("⚠️ Using lighter 'en_core_web_sm' model. For better accuracy, install 'en_core_web_trf'.")
+        except OSError:
+            st.error("❌ No spaCy model found. Please run: python -m spacy download en_core_web_trf")
+            return None, None, None
+
+    # Build Technical Matcher
+    tech_matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
+    # Convert set to list of strings to ensure compatibility
+    tech_patterns = [nlp.make_doc(str(text)) for text in technical_skills_set]
+    tech_matcher.add("TECH_SKILLS", tech_patterns)
+
+    # Build Soft Skills Matcher
+    soft_matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
+    soft_patterns = [nlp.make_doc(str(text)) for text in soft_skills_set]
+    soft_matcher.add("SOFT_SKILLS", soft_patterns)
+
+    return nlp, tech_matcher, soft_matcher
+
+
+def extract_skills_unified(text, skill_type, tech_set, soft_set):
+    """Unified extraction function that uses the cached matchers"""
+    if not text:
+        return []
+
+    # This call hits the cache, so it's instant
+    nlp, tech_matcher, soft_matcher = load_nlp_resources(tech_set, soft_set)
+    
+    if not nlp:
+        return []
+
+    doc = nlp(text)
+    found_skills = set()
+    
+    if skill_type == "technical":
+        matches = tech_matcher(doc)
+    else:
+        matches = soft_matcher(doc)
+
+    for _, start, end in matches:
+        found_skills.add(doc[start:end].text.lower())
+
+    return sorted(list(found_skills))
+
+
+# Wrapper functions to match your original function calls in app.py
+def extract_technical_skills(text, skill_set):
+    # We pass both sets to the loader so it caches everything once
+    return extract_skills_unified(text, "technical", skill_set, set())
 
 
 def extract_soft_skills(text, skill_set):
-    """Extract soft skills using simple text matching"""
-    if not text:
-        return []
-    text = text.lower()
-    found_skills = set()
-    for skill in skill_set:
-        if skill in text:
-            found_skills.add(skill)
-    return sorted(found_skills)
-
-
-def extract_technical_skills(text, skill_set):
-    """Extract technical skills using spaCy PhraseMatcher"""
-    if not text:
-        return []
-    
-    nlp = load_spacy_model()
-    if nlp is None:
-        return []
-    
-    max_length = 1000000
-    
-    if len(text) > max_length:
-        chunks = [text[i:i+max_length] for i in range(0, len(text), max_length)]
-        all_skills = set()
-        
-        for chunk in chunks:
-            matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
-            patterns = [nlp.make_doc(skill) for skill in skill_set]
-            matcher.add("TECH_SKILLS", patterns)
-            doc = nlp(chunk)
-            matches = matcher(doc)
-            for _, start, end in matches:
-                all_skills.add(doc[start:end].text.lower())
-        
-        return sorted(list(all_skills))
-    else:
-        matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
-        patterns = [nlp.make_doc(skill) for skill in skill_set]
-        matcher.add("TECH_SKILLS", patterns)
-        doc = nlp(text)
-        matches = matcher(doc)
-        skills_found = set()
-        for _, start, end in matches:
-            skills_found.add(doc[start:end].text.lower())
-        return sorted(skills_found)
+    # We pass empty tech set here, but the loader uses the cached version anyway
+    return extract_skills_unified(text, "soft", set(), skill_set)
 
 
 def categorize_skills(skills):
@@ -77,7 +86,8 @@ def categorize_skills(skills):
         skill_lower = skill.lower()
         found = False
         for category, category_skills in SKILL_CATEGORIES.items():
-            if skill_lower in category_skills:
+            # Check if skill is in this category (case-insensitive)
+            if skill_lower in [s.lower() for s in category_skills]:
                 if category not in categorized:
                     categorized[category] = []
                 categorized[category].append(skill)

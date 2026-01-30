@@ -9,28 +9,32 @@ import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 
-# Import custom modules
-from modules.document_processing import extract_text, clean_text, extract_experience
-from modules.nlp_processing import extract_technical_skills, extract_soft_skills, categorize_skills
-from modules.github_analyzer import (
+# Import from the modules package (uses your 2.py __init__.py)
+from modules import (
+    extract_text, 
+    clean_text, 
+    extract_experience,
+    extract_technical_skills, 
+    extract_soft_skills, 
+    categorize_skills,
     detect_github_in_resume, 
     extract_github_username, 
     fetch_github_repos, 
     extract_github_skills,
-    analyze_github_profile
-)
-from modules.visualization import (
+    analyze_github_profile,
     create_donut_chart, 
     create_category_heatmap,
-    create_skill_distribution_chart
-)
-from modules.report_generator import generate_csv_report, generate_word_report, generate_pdf_report
-from modules.utils import (
+    create_skill_distribution_chart,
+    generate_csv_report, 
+    generate_word_report, 
+    generate_pdf_report,
     build_similarity_matrix, 
     classify_skill_matches, 
     compute_metrics,
     calculate_skill_match
 )
+
+# Keep data imports separate
 from data.skills_list import MASTER_TECHNICAL_SKILLS, MASTER_SOFT_SKILLS
 
 # Page Configuration
@@ -741,13 +745,16 @@ if analyze_button and jd_file and resume_file:
             ))
             
             area_fig.update_layout(
-                title="Average Similarity Score by Category",
-                xaxis_title="Skill Categories",
-                yaxis_title="Similarity Score (%)",
-                height=400,
-                hovermode='x unified',
-                yaxis=dict(range=[0, 100])
-            )
+            title="Average Similarity Score by Category",
+            xaxis_title="Skill Categories",
+            yaxis_title="Similarity Score (%)",
+            height=400,
+            hovermode='x unified',
+            yaxis=dict(
+                autorange=True,
+                rangemode="tozero",
+                ticksuffix="%"
+            ))
             
             st.plotly_chart(area_fig, use_container_width=True)
         else:

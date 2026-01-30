@@ -118,7 +118,7 @@ def extract_text(file):
         return ""
 
 
-def clean_text(text):
+# def clean_text(text):
     """Clean and normalize text for NLP processing - optimized for longer documents"""
     if not text:
         return ""
@@ -134,6 +134,25 @@ def clean_text(text):
     
     text = re.sub(r'[^a-z0-9_\s]', ' ', text)
     
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    return text
+
+def clean_text(text):
+    """Clean and normalize text for NLP processing - optimized for tech stacks"""
+    if not text:
+        return ""
+    
+    text = text.lower()
+    
+    # Preserve experience ranges
+    text = re.sub(r'(\d+)\s*(?:-|–|to)\s*(\d+)', r'\1_\2', text)
+    text = re.sub(r'(\d+)\s*\+', r'\1_plus', text)
+    
+    text = re.sub(r'\n+', ' ', text)
+    text = re.sub(r'\t+', ' ', text)
+    # Allow a-z, 0-9, underscore, whitespace, AND +, #, . (for C++, C#, .NET, Node.js)
+    text = re.sub(r'[^a-z0-9_\s\+\#\.]', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
     
     return text

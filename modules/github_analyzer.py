@@ -1,10 +1,11 @@
 """
 GitHub Profile Analyzer Module
-Analyzes GitHub profiles for additional skill extraction
+Analyzes GitHub profiles for additional skill extraction (Optimized & Safe)
 """
 
 import re
 import requests
+import streamlit as st
 from datetime import datetime, timedelta
 
 
@@ -35,29 +36,57 @@ def extract_github_username(url):
 
 
 def fetch_github_repos(username):
-    """Fetch public repositories of a GitHub user"""
+    """Fetch public repositories of a GitHub user with rate limit safety"""
     api_url = f"https://api.github.com/users/{username}/repos"
     try:
         response = requests.get(api_url, timeout=10)
+        
+        # --- CRITICAL FIX START ---
+        # Prevent app crash if GitHub rate limit (60 req/hr) is hit
+        if response.status_code == 403:
+            st.warning("⚠️ GitHub API rate limit exceeded. GitHub skills cannot be analyzed right now.")
+            return []
+        # --- CRITICAL FIX END ---
+            
         if response.status_code == 200:
             return response.json()
-    except:
+    except Exception as e:
+        # Silently fail or log debug info, but don't crash the UI
         pass
     return []
 
 
 def extract_github_skills(repos, skill_set):
-    """Extract skills from repo names, descriptions, and languages"""
+    """Extract skills from repo names/desc using word boundaries to prevent false matches"""
     found_skills = set()
+    
+    if not repos:
+        return []
+
+    # Pre-compile regex patterns for efficiency
+    import re
+    
     for repo in repos:
-        text = f"{repo.get('name','')} {repo.get('description','')}".lower()
+        # Combine name and description
+        text = f"{repo.get('name','')} {repo.get('description','') or ''}".lower()
+        
         for skill in skill_set:
+            # First do a fast string check
             if skill in text:
-                found_skills.add(skill)
+                # --- ACCURACY FIX START ---
+                # Use regex boundaries to ensure "Good" doesn't match "Go"
+                # Escape skill to handle special chars like C++
+                pattern = r'(?:^|[\s\W])' + re.escape(skill) + r'(?:$|[\s\W])'
+                if re.search(pattern, text):
+                    found_skills.add(skill)
+                # --- ACCURACY FIX END ---
+        
+        # Always trust the official GitHub language field
         if repo.get("language"):
             lang = repo["language"].lower()
             if lang in skill_set:
                 found_skills.add(lang)
+                
     return sorted(found_skills)
 
 

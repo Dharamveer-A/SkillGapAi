@@ -55,7 +55,7 @@ def generate_word_report(skill_match_result, jd_skills, overall_match, matched_s
     title.alignment = 1
     doc.add_heading('Executive Summary', 1)
     summary_table = doc.add_table(rows=4, cols=2)
-    summary_table.style = 'Light Grid Accent 1'
+    summary_table.style = 'Table Grid' # Changed to standard grid for better compatibility
     summary_data = [
         ('Overall Match Rate', f'{overall_match}%'),
         ('Matched Skills', str(matched_skills_count)),
@@ -145,12 +145,24 @@ def generate_word_report(skill_match_result, jd_skills, overall_match, matched_s
 
 
 def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_skills_count, match_counts):
-    """Generate PDF report"""
-    pdf = FPDF()
+    """Generate PDF report - Fixed for Cloud Deployment"""
+    
+    # --- FIX 1: Use Class to handle Header/Footer automatically ---
+    class PDF(FPDF):
+        def header(self):
+            self.set_font('Arial', 'B', 20)
+            self.cell(0, 15, "Skill Gap Analysis Report", ln=True, align='C')
+            self.ln(5)
+
+        def footer(self):
+            self.set_y(-15)
+            self.set_font('Arial', 'I', 8)
+            self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
+    pdf = PDF()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 20)
-    pdf.cell(0, 15, "Skill Gap Analysis Report", ln=True, align='C')
-    pdf.ln(5)
+    
+    # Executive Summary Section
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, "Executive Summary", ln=True)
     pdf.set_font("Arial", '', 11)
@@ -172,7 +184,7 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
     pdf.set_font("Arial", '', 10)
     bar_width = 170
     bar_height = 15
-    x_start = 20
+    x_start = 10  # Adjusted margin
     y_start = pdf.get_y()
     pdf.set_fill_color(220, 220, 220)
     pdf.rect(x_start, y_start, bar_width, bar_height, 'F')
@@ -188,15 +200,16 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
     pdf.rect(x_start, y_start, bar_width, bar_height, 'D')
     pdf.set_xy(x_start + bar_width/2 - 10, y_start + 3)
     pdf.set_font("Arial", 'B', 11)
-    if overall_match > 30:
-        pdf.set_text_color(255, 255, 255)
+    # Contrast text color
+    if overall_match > 50: 
+        pdf.set_text_color(0, 0, 0) # Black is safer for generic readability
     else:
         pdf.set_text_color(0, 0, 0)
     pdf.cell(20, 8, f"{overall_match}%", align='C')
     pdf.set_text_color(0, 0, 0)
     pdf.ln(20)
     
-    # Skills Distribution Chart
+    # Skills Distribution Chart (Your Original Chart restored)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 8, "Skills Distribution", ln=True)
     pdf.ln(2)
@@ -207,7 +220,7 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
     if total_skills > 0:
         chart_width = 170
         chart_height = 40
-        x_chart = 20
+        x_chart = 10
         y_chart = pdf.get_y()
         matched_width = (matched / total_skills) * chart_width
         partial_width = (partial / total_skills) * chart_width
@@ -225,7 +238,7 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
         pdf.rect(x_chart, y_chart, chart_width, chart_height, 'D')
         pdf.ln(chart_height + 5)
         pdf.set_font("Arial", '', 9)
-        legend_x = 20
+        legend_x = 10
         legend_y = pdf.get_y()
         pdf.set_fill_color(40, 167, 69)
         pdf.rect(legend_x, legend_y, 5, 5, 'F')
@@ -241,6 +254,14 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
         pdf.cell(40, 6, f"Missing ({missing})")
         pdf.ln(12)
     
+    # --- FIX 2: Helper for safe text printing ---
+    def safe_cell(text):
+        """Helper to sanitize text for PDF output"""
+        try:
+            return text.encode('latin-1', 'replace').decode('latin-1')
+        except:
+            return text.replace("’", "'").replace("–", "-")
+
     # Technical Skills Section
     tech_matched = [s for s in skill_match_result['matched'] if s in jd_skills["technical"]]
     tech_partial = [s for s in skill_match_result['partial'] if s in jd_skills["technical"]]
@@ -254,9 +275,8 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
     pdf.set_font("Arial", '', 10)
     if tech_matched:
         for skill in tech_matched:
-            clean_skill = skill.encode('latin-1', 'replace').decode('latin-1')
             pdf.cell(5, 6, '', 0, 0)
-            pdf.cell(0, 6, clean_skill, 0, 1)
+            pdf.cell(0, 6, safe_cell(skill), 0, 1)
     else:
         pdf.cell(0, 6, "No technical skills matched.", 0, 1)
     pdf.ln(3)
@@ -269,9 +289,8 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
     pdf.set_font("Arial", '', 10)
     if tech_partial:
         for skill in tech_partial:
-            clean_skill = skill.encode('latin-1', 'replace').decode('latin-1')
             pdf.cell(5, 6, '', 0, 0)
-            pdf.cell(0, 6, clean_skill, 0, 1)
+            pdf.cell(0, 6, safe_cell(skill), 0, 1)
     else:
         pdf.cell(0, 6, "No technical skills partially matched.", 0, 1)
     pdf.ln(3)
@@ -284,9 +303,8 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
     pdf.set_font("Arial", '', 10)
     if tech_missing:
         for skill in tech_missing:
-            clean_skill = skill.encode('latin-1', 'replace').decode('latin-1')
             pdf.cell(5, 6, '', 0, 0)
-            pdf.cell(0, 6, clean_skill, 0, 1)
+            pdf.cell(0, 6, safe_cell(skill), 0, 1)
     else:
         pdf.cell(0, 6, "No missing technical skills!", 0, 1)
     pdf.ln(5)
@@ -304,9 +322,8 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
     pdf.set_font("Arial", '', 10)
     if soft_matched:
         for skill in soft_matched:
-            clean_skill = skill.encode('latin-1', 'replace').decode('latin-1')
             pdf.cell(5, 6, '', 0, 0)
-            pdf.cell(0, 6, clean_skill, 0, 1)
+            pdf.cell(0, 6, safe_cell(skill), 0, 1)
     else:
         pdf.cell(0, 6, "No soft skills matched.", 0, 1)
     pdf.ln(3)
@@ -319,9 +336,8 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
     pdf.set_font("Arial", '', 10)
     if soft_partial:
         for skill in soft_partial:
-            clean_skill = skill.encode('latin-1', 'replace').decode('latin-1')
             pdf.cell(5, 6, '', 0, 0)
-            pdf.cell(0, 6, clean_skill, 0, 1)
+            pdf.cell(0, 6, safe_cell(skill), 0, 1)
     else:
         pdf.cell(0, 6, "No soft skills partially matched.", 0, 1)
     pdf.ln(3)
@@ -334,9 +350,8 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
     pdf.set_font("Arial", '', 10)
     if soft_missing:
         for skill in soft_missing:
-            clean_skill = skill.encode('latin-1', 'replace').decode('latin-1')
             pdf.cell(5, 6, '', 0, 0)
-            pdf.cell(0, 6, clean_skill, 0, 1)
+            pdf.cell(0, 6, safe_cell(skill), 0, 1)
     else:
         pdf.cell(0, 6, "No missing soft skills!", 0, 1)
     pdf.ln(5)
@@ -369,8 +384,6 @@ def generate_pdf_report(skill_match_result, jd_skills, overall_match, matched_sk
     pdf.cell(0, 6, "4. Target positions with 70%+ match rate for better success", ln=True)
     pdf.ln(5)
     
-    # Footer
-    pdf.set_font("Arial", 'I', 9)
-    pdf.cell(0, 10, f"Generated on: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}", 0, 0, 'C')
+    # Footer - Added in Class structure at the top
     
     return pdf.output(dest="S").encode("latin-1")
