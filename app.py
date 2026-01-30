@@ -34,7 +34,7 @@ from modules import (
     calculate_skill_match
 )
 
-# Keep data imports separate
+# Importing pre-defined data
 from data.skills_list import MASTER_TECHNICAL_SKILLS, MASTER_SOFT_SKILLS
 
 # Page Configuration
