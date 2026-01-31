@@ -1,0 +1,10 @@
+# Ignore the secret token
+.streamlit/secrets.toml
+
+# Ignore Python temporary files
+__pycache__/
+*.pyc
+
+# Ignore OS specific files
+.DS_Store
+Thumbs.db

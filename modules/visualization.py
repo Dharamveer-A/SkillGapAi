@@ -153,7 +153,7 @@ def create_skill_distribution_chart(matched, partial, missing):
         wedgeprops=dict(width=0.4, edgecolor="white")
     )
     for autotext in autotexts:
-        autotext.set_color('black')
+        autotext.set_color('white')  # Changed from black to white for better contrast
         autotext.set_fontweight('bold')
         autotext.set_fontsize(11)
     ax.set(aspect="equal")

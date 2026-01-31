@@ -84,8 +84,24 @@ def extract_github_skills(repos, skill_set):
     return sorted(found_skills)
 
 
-def analyze_github_profile(repos):
-    """Analyze GitHub profile and provide suggestions"""
+def analyze_github_profile(username_or_repos):
+    """
+    Analyze GitHub profile and provide suggestions.
+    Accepts either a username (string) or repos list (from fetch_github_repos).
+    Returns stats dict with insights and suggestions.
+    """
+    # Handle both username and repos list
+    if isinstance(username_or_repos, str):
+        # It's a username, fetch repos
+        repos = fetch_github_repos(username_or_repos)
+        username = username_or_repos
+    elif isinstance(username_or_repos, list):
+        # It's already a repos list
+        repos = username_or_repos
+        username = None
+    else:
+        return None
+    
     if not repos:
         return None
     
@@ -94,8 +110,12 @@ def analyze_github_profile(repos):
     topics_used = set()
     has_readme_projects = 0
     recent_activity = 0
+    total_stars = 0
     
     for repo in repos:
+        # Count stars
+        total_stars += repo.get("stargazers_count", 0)
+        
         if repo.get("language"):
             lang = repo["language"]
             languages_used[lang] = languages_used.get(lang, 0) + 1
@@ -113,6 +133,21 @@ def analyze_github_profile(repos):
                     recent_activity += 1
             except:
                 pass
+    
+    # Get user profile stats if we have a username
+    followers = 0
+    public_repos_count = total_repos
+    
+    if username:
+        try:
+            profile_url = f"https://api.github.com/users/{username}"
+            response = requests.get(profile_url, timeout=5)
+            if response.status_code == 200:
+                user_data = response.json()
+                followers = user_data.get("followers", 0)
+                public_repos_count = user_data.get("public_repos", total_repos)
+        except:
+            pass
     
     insights = {
         "total_repos": total_repos,
@@ -141,7 +176,13 @@ def analyze_github_profile(repos):
     if total_repos < 5:
         suggestions.append("Build more projects to demonstrate your skills and experience")
     
+    # Return stats compatible with both mobile_app.py and web_app2.py
     return {
         "insights": insights,
-        "suggestions": suggestions
+        "suggestions": suggestions,
+        # Additional fields for mobile_app.py compatibility
+        "total_stars": total_stars,
+        "followers": followers,
+        "public_repos": public_repos_count,
+        "top_languages": [lang[0] for lang in sorted(languages_used.items(), key=lambda x: x[1], reverse=True)[:3]]
     }

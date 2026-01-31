@@ -99,6 +99,10 @@ if 'resume_text' not in st.session_state:
     st.session_state.resume_text = None
 if 'jd_text' not in st.session_state:
     st.session_state.jd_text = None
+if 'analysis_complete' not in st.session_state:
+    st.session_state.analysis_complete = False
+if 'analysis_data' not in st.session_state:
+    st.session_state.analysis_data = {}
 
 # File Upload Section
 st.subheader("Upload Documents")
@@ -225,9 +229,12 @@ if analyze_button:
     
     st.success("✅ Both files uploaded successfully! Starting analysis...")
     st.write("")
+    
+    # Set flag to trigger analysis
+    st.session_state.analysis_complete = True
 
-# Main Analysis
-if analyze_button and jd_file and resume_file:
+# Main Analysis - Now runs if analysis_complete is True OR if button just clicked
+if (analyze_button or st.session_state.analysis_complete) and jd_file and resume_file:
     
     # Document Preview
     st.subheader("Parsed Document Preview")
@@ -320,15 +327,35 @@ if analyze_button and jd_file and resume_file:
     col1, col2 = st.columns(2)
     with col1:
         if resume_experience:
-            st.info(f"📅 Resume Experience: {resume_experience['min_exp']}" + 
-                   (f"-{resume_experience['max_exp']}" if resume_experience['max_exp'] else "+") + " years")
+            min_exp = resume_experience['min_exp']
+            max_exp = resume_experience['max_exp']
+            
+            # Format experience display
+            if max_exp and max_exp != min_exp:
+                exp_text = f"{min_exp}-{max_exp} years"
+            elif max_exp is None:
+                exp_text = f"{min_exp}+ years"
+            else:
+                exp_text = f"{min_exp} years"
+            
+            st.info(f"📅 Resume Experience: {exp_text}")
         else:
             st.warning("⚠️ No experience information found in resume")
     
     with col2:
         if jd_experience:
-            st.info(f"📋 JD Required Experience: {jd_experience['min_exp']}" + 
-                   (f"-{jd_experience['max_exp']}" if jd_experience['max_exp'] else "+") + " years")
+            min_exp = jd_experience['min_exp']
+            max_exp = jd_experience['max_exp']
+            
+            # Format experience display
+            if max_exp and max_exp != min_exp:
+                exp_text = f"{min_exp}-{max_exp} years"
+            elif max_exp is None:
+                exp_text = f"{min_exp}+ years"
+            else:
+                exp_text = f"{min_exp} years"
+            
+            st.info(f"📋 JD Required Experience: {exp_text}")
         else:
             st.warning("⚠️ No experience requirement found in JD")
     
@@ -343,14 +370,28 @@ if analyze_button and jd_file and resume_file:
         
         detected_github_url = detect_github_in_resume(resume_text)
         
-        st.subheader("GitHub Profile Analyzer")
+        st.subheader("🐙 GitHub Profile Impact")
         
-        if detected_github_url:
-            st.success(f"✅ GitHub profile detected in resume: {detected_github_url}")
-            auto_analyze = st.checkbox("Automatically analyze detected GitHub profile", value=True)
-            
-            if auto_analyze:
+        # Check if we have the token in secrets
+        if "GITHUB_TOKEN" not in st.secrets:
+            st.warning("⚠️ GitHub Token missing in .streamlit/secrets.toml. GitHub analysis is disabled.")
+            github_url = None
+        else:
+            if detected_github_url:
+                st.success(f"✅ GitHub profile detected: {detected_github_url}")
                 github_url = detected_github_url
+            else:
+                github_url = st.text_input("Enter GitHub Profile URL (Optional)", placeholder="https://github.com/username")
+
+        if github_url:
+            username = extract_github_username(github_url)
+            if username:
+                with st.spinner(f"Analyzing @{username}..."):
+                    repos = fetch_github_repos(username)
+                    if repos:
+                        github_skills = extract_github_skills(repos, MASTER_TECHNICAL_SKILLS)
+                        # Save to session state so Milestone 4 can see it
+                        st.session_state.gh_stats = analyze_github_profile(username)
             else:
                 github_url = st.text_input(
                     "Or enter different GitHub Profile URL",
@@ -493,7 +534,7 @@ if analyze_button and jd_file and resume_file:
         plt.close(fig2)
     
     # Metrics
-    metrics = compute_metrics(resume_skills, jd_skills)
+    metrics = compute_metrics(resume_skills, jd_skills, resume_text, jd_text)
     
     st.subheader("Skill Extraction Metrics")
     
@@ -542,6 +583,14 @@ if analyze_button and jd_file and resume_file:
     all_resume_skills = set(resume_skills["technical"]) | set(resume_skills["soft"])
     all_jd_skills = set(jd_skills["technical"]) | set(jd_skills["soft"])
     match_counts = calculate_skill_match(all_resume_skills, all_jd_skills)
+    
+    # Extract overall match percentage and matched skills count for report generation
+    overall_match = match_counts["avg_match"]  # Pure skill match
+    matched_skills_count = match_counts["matched"]
+    
+    # Also extract the final weighted score from compute_metrics (includes experience)
+    final_weighted_score = metrics["final_score"]
+    experience_score = metrics["exp_score"]
     
     # Skill Match Overview
     st.subheader("Skill Match Overview")
@@ -604,163 +653,126 @@ if analyze_button and jd_file and resume_file:
     st.markdown("""
     <div style="background-color:#470047;padding:20px;border-radius:10px;margin-top:30px;">
         <h2 style="color:white;">Dashboard and Report Export Module</h2>
-        <p style="color:white;">
-            Interactive dashboard • Graphs • Multi-format report export • Optimized for multi-page analysis
-        </p>
     </div>
     """, unsafe_allow_html=True)
-    
-    st.write("")
-    
-    # Metrics Display
-    overall_match = match_counts["avg_match"]
-    matched_skills_count = match_counts["matched"]
-    missing_skills_count = match_counts["missing"]
-    
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Overall Match", f"{overall_match}%")
-    c2.metric("Matched Skills", str(matched_skills_count))
-    c3.metric("Missing Skills", str(missing_skills_count))
-    
-    # Categorized Skill Match
-    st.subheader("Categorized Skill Match Overview")
-    
-    jd_categorized = categorize_skills(list(all_jd_skills))
-    categories_to_plot = []
-    resume_category_scores = []
-    jd_category_scores = []
+
+    # --- 1. PRE-CALCULATE CHARTS (Do this BEFORE showing them) ---
+    jd_categorized = categorize_skills(jd_all_skills)
+    categories_to_plot, resume_category_scores, jd_category_scores = [], [], []
     
     for category, cat_skills in jd_categorized.items():
-        matched_in_category = sum(1 for skill in cat_skills if skill in all_resume_skills)
+        matched_in_category = sum(1 for skill in cat_skills if skill in resume_all_skills)
         total_in_category = len(cat_skills)
         if total_in_category > 0:
             categories_to_plot.append(category)
             resume_category_scores.append((matched_in_category / total_in_category) * 100)
             jd_category_scores.append(100)
-    
-    # Bar Chart
+
+    # Create the Bar Chart variable
     bar_fig = go.Figure()
-    bar_fig.add_trace(go.Bar(
-        name='Your Skills',
-        x=categories_to_plot,
-        y=resume_category_scores,
-        marker_color='#470047',
-        text=[f'{score:.0f}%' for score in resume_category_scores],
-        textposition='outside'
-    ))
-    bar_fig.add_trace(go.Bar(
-        name='Job Requirements',
-        x=categories_to_plot,
-        y=jd_category_scores,
-        marker_color='#28a745',
-        text=['100%'] * len(categories_to_plot),
-        textposition='outside'
-    ))
-    bar_fig.update_layout(
-        title="Skill Match by Category",
-        barmode="group",
-        height=500,
-        xaxis_title="Skill Categories",
-        yaxis_title="Coverage (%)",
-        hovermode='x unified',
-        yaxis=dict(range=[0, 120]),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
+    bar_fig.add_trace(go.Bar(name='Your Skills', x=categories_to_plot, y=resume_category_scores, marker_color='#470047'))
+    bar_fig.add_trace(go.Bar(name='Required', x=categories_to_plot, y=jd_category_scores, marker_color='#28a745'))
+    bar_fig.update_layout(barmode="group", height=400, title="Match by Category")
+
+    # --- 2. DISPLAY DASHBOARD ---
+    st.subheader("📊 Performance Overview")
+    
+    # Top Row: Big Numbers - Show Final Weighted Score as primary metric
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Final Score", f"{final_weighted_score}%", 
+              help="Weighted score including skills and experience")
+    m2.metric("Skill Match", f"{match_counts['avg_match']}%",
+              help="Pure skill matching percentage (no experience)")
+    m3.metric("Matched Skills", match_counts["matched"])
+    m4.metric("Missing Skills", match_counts["missing"])
+    
+    # Scoring Explanation
+    with st.expander("ℹ️ How is the Final Score Calculated?", expanded=False):
+        st.markdown(f"""
+        **Final Score = {final_weighted_score}%**
+        
+        This score combines:
+        - **Skill Match**: {match_counts['avg_match']}% (your skills vs job requirements)
+        - **Experience Score**: {experience_score}% (your experience vs required)
+        
+        **Weighting Used**: {metrics['weight_text']}
+        
+        **Your Experience**: {metrics['res_years']} years  
+        **Required Experience**: {metrics['jd_years']}+ years
+        
+        💡 The weighting is dynamic:
+        - Entry-level roles emphasize skills more (90% skills, 10% experience)
+        - Senior roles balance both (80% skills, 20% experience)
+        """)
+
+    st.write("---")
+
+    # Ploting stacked bar chart
     st.plotly_chart(bar_fig, use_container_width=True)
-    
-    # Radar Chart
-    radar_categories = categories_to_plot[:6] if len(categories_to_plot) > 6 else categories_to_plot
-    radar_resume_scores = resume_category_scores[:6] if len(resume_category_scores) > 6 else resume_category_scores
-    radar_jd_scores = [100] * len(radar_categories)
-    
-    radar_fig = go.Figure()
-    radar_fig.add_trace(go.Scatterpolar(
-        r=radar_resume_scores,
-        theta=radar_categories,
-        fill='toself',
-        name='Current Profile',
-        line_color='#470047'
-    ))
-    radar_fig.add_trace(go.Scatterpolar(
-        r=radar_jd_scores,
-        theta=radar_categories,
-        fill='toself',
-        name='Job Requirements',
-        line_color='#28a745'
-    ))
-    radar_fig.update_layout(
-        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-        title="Top Skill Categories Comparison",
-        height=500,
-        showlegend=True
-    )
-    st.plotly_chart(radar_fig, use_container_width=True)
-    
-    # Sample Skill Proficiency
-    st.subheader("Sample Skill Proficiency")
-    st.caption("Note: These are sample scores for demonstration. For actual proficiency, use skill assessment tools.")
-    
-    sample_skills = [("Python", 92), ("Machine Learning", 88), ("SQL", 65)]
-    for skill, score in sample_skills:
-        col_skill, col_progress = st.columns([1, 4])
-        with col_skill:
-            st.write(f"**{skill}**")
-        with col_progress:
-            st.progress(score / 100)
-            st.caption(f"{score}%")
-    
-    # Category-wise Similarity Score Distribution
-    st.subheader("Category-wise Similarity Score Distribution")
-    
-    if resume_all_skills and jd_all_skills and len(similarity_matrix) > 0:
-        jd_categorized = categorize_skills(jd_all_skills)
-        
-        category_similarities = {}
-        
-        for category, cat_skills in jd_categorized.items():
-            cat_scores = []
-            for skill in cat_skills:
-                if skill in jd_all_skills:
-                    j = jd_all_skills.index(skill)
-                    column_scores = similarity_matrix[:, j]
-                    avg_score = np.mean(column_scores) * 100
-                    cat_scores.append(avg_score)
-            
-            if cat_scores:
-                category_similarities[category] = np.mean(cat_scores)
-        
-        if category_similarities:
-            categories = list(category_similarities.keys())
-            scores = list(category_similarities.values())
-            
-            area_fig = go.Figure()
-            area_fig.add_trace(go.Scatter(
-                x=categories,
-                y=scores,
-                fill='tozeroy',
-                name='Avg Similarity Score',
-                line_color='#470047',
-                fillcolor='rgba(124, 58, 237, 0.3)',
-                mode='lines+markers'
-            ))
-            
-            area_fig.update_layout(
-            title="Average Similarity Score by Category",
-            xaxis_title="Skill Categories",
-            yaxis_title="Similarity Score (%)",
-            height=400,
-            hovermode='x unified',
-            yaxis=dict(
-                autorange=True,
-                rangemode="tozero",
-                ticksuffix="%"
-            ))
-            
-            st.plotly_chart(area_fig, use_container_width=True)
-        else:
-            st.info("No category data available for similarity analysis")
+
+    # GitHub impact
+    if 'gh_stats' in st.session_state and st.session_state.gh_stats:
+        gh = st.session_state.gh_stats
+        st.markdown("### 🐙 GitHub Impact")
+        st.write(f"**Top Languages:** {', '.join(gh['top_languages'])}")
+        c1, c2 = st.columns(2)
+        c1.metric("Stars ⭐", gh['total_stars'])
+        c2.metric("Followers 👥", gh['followers'])
     else:
-        st.info("Upload documents to see similarity score distribution")
+        st.info("💡 Pro Tip: Adding a GitHub link to your resume increases your technical score!")
+    
+    # Radar Chart - Skill Category Comparison
+    st.write("---")
+    st.subheader("🎯 Top Skill Categories Comparison")
+    
+    if categories_to_plot:
+        radar_categories = categories_to_plot[:6] if len(categories_to_plot) > 6 else categories_to_plot
+        radar_resume_scores = resume_category_scores[:6] if len(resume_category_scores) > 6 else resume_category_scores
+        radar_jd_scores = [100] * len(radar_categories)
+        
+        radar_fig = go.Figure()
+        radar_fig.add_trace(go.Scatterpolar(
+            r=radar_resume_scores,
+            theta=radar_categories,
+            fill='toself',
+            name='Your Profile',
+            line_color='#470047',
+            fillcolor='rgba(71, 0, 71, 0.3)'
+        ))
+        radar_fig.add_trace(go.Scatterpolar(
+            r=radar_jd_scores,
+            theta=radar_categories,
+            fill='toself',
+            name='Job Requirements',
+            line_color='#28a745',
+            fillcolor='rgba(40, 167, 69, 0.2)'
+        ))
+        radar_fig.update_layout(
+            polar=dict(
+                radialaxis=dict(
+                    visible=True, 
+                    range=[0, 100],
+                    ticksuffix='%'
+                )
+            ),
+            height=500,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.15,
+                xanchor="center",
+                x=0.5
+            )
+        )
+        st.plotly_chart(radar_fig, use_container_width=True)
+        st.caption("📊 Shows your skill coverage across top 6 categories. Aim to match the green line!")
+    else:
+        st.info("Upload documents to see radar chart comparison")
+
+    # --- 3. UPSKILLING & DOWNLOADS ---
+    st.write("---")
+    st.subheader("🚀 Next Steps")
     
     # Upskilling Recommendations
     st.subheader("Upskilling Recommendations")
@@ -798,7 +810,7 @@ if analyze_button and jd_file and resume_file:
         doc_file = generate_word_report(
             skill_match_result,
             jd_skills,
-            overall_match,
+            final_weighted_score,  # Use final weighted score instead of skill-only match
             matched_skills_count,
             match_counts
         )
@@ -815,7 +827,7 @@ if analyze_button and jd_file and resume_file:
             pdf_bytes = generate_pdf_report(
                 skill_match_result,
                 jd_skills,
-                overall_match,
+                final_weighted_score,  # Use final weighted score instead of skill-only match
                 matched_skills_count,
                 match_counts
             )

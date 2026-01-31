@@ -118,26 +118,6 @@ def extract_text(file):
         return ""
 
 
-# def clean_text(text):
-    """Clean and normalize text for NLP processing - optimized for longer documents"""
-    if not text:
-        return ""
-    
-    text = text.lower()
-    
-    # Preserve experience ranges before cleaning
-    text = re.sub(r'(\d+)\s*(?:-|–|to)\s*(\d+)', r'\1_\2', text)
-    text = re.sub(r'(\d+)\s*\+', r'\1_plus', text)
-    
-    text = re.sub(r'\n+', ' ', text)
-    text = re.sub(r'\t+', ' ', text)
-    
-    text = re.sub(r'[^a-z0-9_\s]', ' ', text)
-    
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    return text
-
 def clean_text(text):
     """Clean and normalize text for NLP processing - optimized for tech stacks"""
     if not text:
@@ -164,32 +144,34 @@ def extract_experience(text):
         return None
     text = text.lower()
     
-    # Pattern 1: Experience range
-    range_match = re.search(r'(\d+)\s*(?:-|–|to)\s*(\d+)\s*(?:years?|yrs?)', text)
+    # Pattern 1: Experience range (e.g., "3-5 years", "2 to 4 years")
+    range_match = re.search(r'(\d+)\s*(?:-|–|to)\s*(\d+)\s*(?:years?|yrs?)\s*(?:of\s+)?(?:experience|exp)', text)
     if range_match:
         return {"min_exp": int(range_match.group(1)), "max_exp": int(range_match.group(2))}
     
-    # Pattern 2: Experience plus
-    plus_match = re.search(r'(\d+)\s*\+\s*(?:years?|yrs?)', text)
+    # Pattern 2: Experience plus (e.g., "5+ years", "3 + years")
+    plus_match = re.search(r'(\d+)\s*\+\s*(?:years?|yrs?)\s*(?:of\s+)?(?:experience|exp)', text)
     if plus_match:
         return {"min_exp": int(plus_match.group(1)), "max_exp": None}
     
-    # Pattern 3: "with X years"
-    with_years_match = re.search(r'(?:with|over|around|approximately)\s+(\d+)\s+(?:years?|yrs?)', text)
+    # Pattern 3: "with X years" context
+    with_years_match = re.search(r'(?:with|over|around|approximately|minimum|minimum of|atleast|at least)\s+(\d+)\s+(?:years?|yrs?)\s*(?:of\s+)?(?:experience|exp)?', text)
     if with_years_match:
         years = int(with_years_match.group(1))
         return {"min_exp": years, "max_exp": years}
     
-    # Pattern 4: "X years of experience"
-    years_of_match = re.search(r'(\d+)\s+(?:years?|yrs?)\s+(?:of\s+)?(?:experience|specializing|in|working)', text)
+    # Pattern 4: "X years of experience" (most common)
+    years_of_match = re.search(r'(\d+)\s+(?:years?|yrs?)\s+(?:of\s+)?(?:experience|exp|working|professional|relevant)', text)
     if years_of_match:
         years = int(years_of_match.group(1))
         return {"min_exp": years, "max_exp": years}
     
-    # Pattern 5: General fallback
-    general_match = re.search(r'(\d+)\s+(?:years?|yrs?)', text)
-    if general_match:
-        years = int(general_match.group(1))
+    # Pattern 5: Experience followed by years (e.g., "experience: 5 years")
+    exp_colon_match = re.search(r'(?:experience|exp)[\s:]+(\d+)\s+(?:years?|yrs?)', text)
+    if exp_colon_match:
+        years = int(exp_colon_match.group(1))
         return {"min_exp": years, "max_exp": years}
     
+    # NO general fallback to avoid false positives
+    # Only return None if no experience-related pattern found
     return None
